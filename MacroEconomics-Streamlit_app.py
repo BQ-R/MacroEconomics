@@ -5,9 +5,10 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from openai import OpenAI
 
-# Configura tu clave OpenAI
+# Configura tu clave OpenAI desde secrets.toml
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
+# Función para detectar código de país desde dirección
 def obtener_codigo_pais(direccion):
     url = "https://nominatim.openstreetmap.org/search"
     params = {'q': direccion, 'format': 'json', 'limit': 1, 'addressdetails': 1}
@@ -22,10 +23,10 @@ def obtener_codigo_pais(direccion):
         return None
     return None
 
-# --- UI ---
-st.title("📍 Resumen de Inflación Armonizada (HICP) con GPT")
+# Interfaz Streamlit
+st.title("📍 Resumen de Inflación Armonizada (HICP)")
 direccion = st.text_input("Introduce una dirección europea:")
-longitud = st.slider("Número deseado de palabras en el resumen:", 100, 300, 150, step=25)
+longitud = st.slider("Número de palabras en el resumen:", 100, 300, 150, step=25)
 
 if st.button("Generar resumen") and direccion:
     codigo_pais = obtener_codigo_pais(direccion)
@@ -40,6 +41,7 @@ if st.button("Generar resumen") and direccion:
         }
         nombre_pais = paises_nombre.get(codigo_pais, f"País ({codigo_pais})")
 
+        # Obtener datos desde Eurostat
         url = "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_midx"
         params = {
             "format": "JSON",
@@ -65,19 +67,20 @@ if st.button("Generar resumen") and direccion:
             resultado.columns = ["Trimestre", "HICP promedio trimestral"]
             datos_texto = resultado.to_string(index=False)
 
-            # --- GRÁFICO ---
-            st.subheader("📊 Evolución de la inflación armonizada (HICP)")
+            # Mostrar gráfico
+            st.subheader("📊 Evolución de la inflación (HICP)")
             fig, ax = plt.subplots(figsize=(10, 4))
-            ax.plot(resultado["Trimestre"].astype(str), resultado["HICP promedio trimestral"], color='#DAA520', linewidth=2)
+            ax.plot(resultado["Trimestre"].astype(str), resultado["HICP promedio trimestral"],
+                    color='#DAA520', linewidth=2)
             ax.set_facecolor("#F5F5F5")
             fig.patch.set_facecolor("#F5F5F5")
             ax.tick_params(axis='x', rotation=45)
-            ax.set_ylabel("Índice HICP (base 2015=100)")
+            ax.set_ylabel("Índice HICP (base 2015 = 100)")
             ax.set_xlabel("Trimestre")
-            ax.grid(True, linestyle='--', alpha=0.5)
+            ax.grid(True, linestyle='--', alpha=0.4)
             st.pyplot(fig)
 
-            # --- GPT prompts ---
+            # Crear prompts para GPT
             prompt_es = f"""
 Eres un economista que debe analizar la evolución de la inflación armonizada (HICP) de los últimos 5 años para el país: {nombre_pais}.
 
@@ -96,6 +99,7 @@ You have the following table with quarterly average HICP values:
 Write a professional, technical, and clear summary of approximately {longitud} words describing the inflation trend over these 5 years, including periods of acceleration or stabilization, and linking it to the general economic context when relevant. End with a sentence that situates the reader in the current moment. The text must be in English.
 """
 
+            # Llamadas a GPT
             respuesta_es = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[{"role": "user", "content": prompt_es}],
@@ -108,6 +112,7 @@ Write a professional, technical, and clear summary of approximately {longitud} w
                 temperature=0.6
             )
 
+            # Mostrar resultados
             st.subheader("🧠 Resumen en español")
             st.write(respuesta_es.choices[0].message.content.strip())
 
@@ -115,4 +120,4 @@ Write a professional, technical, and clear summary of approximately {longitud} w
             st.write(respuesta_en.choices[0].message.content.strip())
 
         except Exception as e:
-            st.error(f"❌ Error al obtener datos: {e}")
+            st.error(f"❌ Error al obtener datos o generar el resumen: {e}")
